@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="uk" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASTROPULSE // Crew Health Twin — Project ПОpiros</title>
+    <!-- Підключення Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Підключення Chart.js для динамічних телеметричних графіків -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Шрифти Inter та JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        space: {
+                            950: '#070A12',
+                            900: '#0B0F19',
+                            850: '#111827',
+                            800: '#161F33',
+                            700: '#1E293B',
+                        },
+                        neon: {
+                            cyan: '#00E5FF',
+                            blue: '#38BDF8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0B0F19;
+            color: #E2E8F0;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 229, 255, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(56, 189, 248, 0.04) 0%, transparent 40%),
+                linear-gradient(rgba(30, 41, 59, 0.25) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(30, 41, 59, 0.25) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+        }
+
+        /* Анімація скануючого променя на силуеті */
+        @keyframes scanline {
+            0% { transform: translateY(15px); opacity: 0.2; }
+            50% { opacity: 0.9; }
+            100% { transform: translateY(395px); opacity: 0.2; }
+        }
+        .scanner-beam {
+            animation: scanline 4s ease-in-out infinite alternate;
+        }
+
+        /* Пульсація маркерів на тілі */
+        @keyframes pulseRing {
+            0% { transform: scale(0.85); opacity: 0.9; }
+            70% { transform: scale(1.6); opacity: 0; }
+            100% { transform: scale(1.6); opacity: 0; }
+        }
+        .hotspot-ring {
+            transform-origin: center;
+            transform-box: fill-box;
+            animation: pulseRing 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+        }
+
+        /* Кастомний скролбар */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0B0F19; }
+        ::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00E5FF; }
+
+        /* Стилізація слайдера */
+        input[type="range"] {
+            accent-color: #00E5FF;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-neon-cyan selection:text-space-950">
+
+    <!-- ВЕРХНЯ ТЕЛЕМЕТРИЧНА ПАНЕЛЬ -->
+    <header class="sticky top-0 z-30 bg-space-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
+        <div class="max-w-[1600px] mx-auto flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            
+            <!-- Логотип (без захищених знаків NASA) та ідентифікатор команди -->
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-neon-cyan/10 border border-neon-cyan/40 flex items-center justify-center shadow-[0_0_15px_rgba(0,229,255,0.2)]">
+                        <svg class="w-6 h-6 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3-9 4 18 3-9h4" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-mono font-bold tracking-wider text-white text-base sm:text-lg">ASTROPULSE <span class="text-neon-cyan">// CREW HEALTH TWIN</span></span>
+                        </div>
+                        <p class="text-xs font-mono text-slate-400">Team: <span class="text-slate-200 font-semibold">Project ПОpiros</span> • Автономна біометрія екіпажу</p>
+                    </div>
+                </div>
+
+                <!-- Кнопка відкриття довідника NASA HRP на мобільних -->
+                <button onclick="toggleModal(true)" class="lg:hidden px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-neon-cyan flex items-center gap-1.5 transition">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    База HRP
+                </button>
+            </div>
+
+            <!-- Перемикач середовища місії + кнопка довідника -->
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div class="flex items-center gap-2 bg-space-900 border border-slate-800 rounded-xl p-1.5 w-full sm:w-auto">
+                    <label for="env-select" class="text-xs font-mono text-slate-400 pl-2 whitespace-nowrap">СЕРЕДОВИЩЕ:</label>
+                    <select id="env-select" onchange="changeEnvironment()" class="bg-space-800 text-slate-100 text-xs sm:text-sm font-medium rounded-lg px-3 py-1.5 border border-slate-700 focus:outline-none focus:border-neon-cyan w-full sm:w-auto cursor-pointer">
+                        <option value="iss">🛰️ Орбітальна станція (МКС / Gateway)</option>
+                        <option value="moon">🌑 Місячна база (Artemis)</option>
+                        <option value="mars_transit">🚀 Переліт на Марс (Deep Space)</option>
+                        <option value="rover">🚜 Марсохід (EVA Rover)</option>
+                    </select>
+                </div>
+
+                <button onclick="toggleModal(true)" class="hidden lg:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-neon-cyan/10 hover:bg-neon-cyan/20 border border-neon-cyan/40 text-xs font-semibold text-neon-cyan transition cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                    База знань NASA HRP (5 небезпек)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ПАНЕЛЬ АКТИВНИХ КОСМІЧНИХ ЗАГРОЗ СЕРЕДОВИЩА -->
+    <div class="bg-space-900/80 border-b border-slate-800/80 px-4 py-2.5">
+        <div class="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono text-slate-400 uppercase">Активні фактори ризику:</span>
+                <div id="env-hazards-badges" class="flex flex-wrap gap-1.5">
+                    <!-- Динамічно заповнюється JS -->
+                </div>
+            </div>
+            <div class="flex items-center gap-4 font-mono text-slate-300">
+                <span>Гравітація: <strong id="env-gravity" class="text-neon-cyan">0 g (Мікрогравітація)</strong></span>
+                <span>Затримка зв'язку: <strong id="env-latency" class="text-amber-400">~1.5 сек</strong></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ОСНОВНИЙ РОБОЧИЙ ПРОСТІР (3 КОЛОНКИ НА ДЕСКТОПІ) -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        <!-- КОЛОНКА 1 (4/12): ВВЕДЕННЯ БІОМЕТРІЇ + СИМУЛЯТОРИ + ГЕЙМІФІКАЦІЯ -->
+        <section class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Картка біометричних датчиків -->
+            <div class="bg-space-850/90 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-neon-cyan animate-ping"></span>
+                        Введення біометрії (Сол 142)
+                    </h2>
+                    <span class="text-[11px] font-mono text-slate-400">Ручний / Датчики</span>
+                </div>
+
+                <!-- Кнопки швидкої симуляції для суддів -->
+                <div class="mb-4">
+                    <p class="text-[11px] font-mono text-slate-400 mb-1.5">Швидкі сценарії симуляції:</p>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button onclick="applyPreset('normal')" class="px-2 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-semibold transition text-center cursor-pointer">
+                            🟢 Норма
+                        </button>
+                        <button onclick="applyPreset('warning')" class="px-2 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-semibold transition text-center cursor-pointer">
+                            🟡 Стрес / Ризик
+                        </button>
+                        <button onclick="applyPreset('critical')" class="px-2 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/40 text-red-300 text-[11px] font-semibold transition text-center cursor-pointer">
+                            🔴 Критично
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Поля введення показників -->
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                    <!-- Систолічний тиск -->
+                    <div class="bg-space-900 p-2.5 rounded-xl border border-slate-800">
+                        <label for="inp-sys" class="block text-slate-400 mb-1">Тиск Сист. (мм рт.ст.)</label>
+                        <input type="number" id="inp-sys" value="118" min="60" max="220" oninput="recalculateHealth()" class="w-full bg-space-800 border border-slate-700 rounded-lg px-2.5 py-1.5 font-mono text-sm text-white focus:outline-none focus:border-neon-cyan">
+                    </div>
+
+                    <!-- Діастолічний тиск -->
+                    <div class="bg-space-900 p-2.5 rounded-xl border border-slate-800">
+                        <label for="inp-dia" class="block text-slate-400 mb-1">Тиск Діаст. (мм рт.ст.)</label>
+                        <input type="number" id="inp-dia" value="78" min="40" max="140" oninput="recalculateHealth()" class="w-full bg-space-800 border border-slate-700 rounded-lg px-2.5 py-1.5 font-mono text-sm text-white focus:outline-none focus:border-neon-cyan">
+                    </div>
+
+                    <!-- Пульс -->
+                    <div class="bg-space-900 p-2.5 rounded-xl border border-slate-800">
+                        <label for="inp-hr" class="block text-slate-400 mb-1">Пульс (уд/хв)</label>
+                        <input type="number" id="inp-hr" value="72" min="35" max="200" oninput="recalculateHealth()" class="w-full bg-space-800 border border-slate-700 rounded-lg px-2.5 py-1.5 font-mono text-sm text-white focus:outline-none focus:border-neon-cyan">
+                    </div>
+
+                    <!-- Глюкоза -->
+                    <div class="bg-space-900 p-2.5 rounded-xl border border-slate-800">
+                        <label for="inp-glucose" class="block text-slate-400 mb-1">Цукор крові (мг/дл)</label>
+                        <input type="number" id="inp-glucose" value="94" min="30" max="350" oninput="recalculateHealth()" class="w-full bg-space-800 border border-slate-700 rounded-lg px-2.5 py-1.5 font-mono text-sm text-white focus:outline-none focus:border-neon-cyan">
+                    </div>
+
+                    <!-- Температура тіла -->
+                    <div class="bg-space-900 p-2.5 rounded-xl border border-slate-800">
+                        <label for="inp-temp" class="block text-slate-400 mb-1">Температура (°C)</label>
+                        <input type="number" id="inp-temp" value="36.6" step="0.1" min="34.0" max="41.5" oninput="recalculateHealth()" class="w-full bg-space-800 border border-slate-700 rounded-lg px-2.5 py-1.5 font-mono text-sm text-white focus:outline-none focus:border-neon-cyan">
+                    </div>
+
+                    <!-- Години сну -->
+                    <div class="bg-space-900 p-2.5 rounded-xl border border-slate-800">
+                        <label for="inp-sleep" class="block text-slate-400 mb-1">Сон за добу (год)</label>
+                        <input type="number" id="inp-sleep" value="7.5" step="0.5" min="0" max="14" oninput="recalculateHealth()" class="w-full bg-space-800 border border-slate-700 rounded-lg px-2.5 py-1.5 font-mono text-sm text-white focus:outline-none focus:border-neon-cyan">
+                    </div>
+
+                    <!-- Настрій / Психологічний індекс -->
+                    <div class="col-span-2 bg-space-900 p-2.5 rounded-xl border border-slate-800">
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="inp-mood" class="text-slate-400">Психологічний індекс / Настрій</label>
+                            <span id="mood-val-label" class="font-mono font-bold text-neon-cyan">8 / 10</span>
+                        </div>
+                        <input type="range" id="inp-mood" value="8" min="1" max="10" oninput="recalculateHealth()" class="w-full cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-0.5">
+                            <span>1 (Виснаження)</span>
+                            <span>5 (Норма)</span>
+                            <span>10 (Оптимум)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Картка гейміфікації: Протоколи підтримки здоров'я (EVA Readiness) -->
+            <div class="bg-space-850/90 border border-slate-800 rounded-2xl p-4 shadow-lg flex-1 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-200">Протоколи EVA Readiness</h2>
+                        <span id="eva-score-badge" class="font-mono text-sm font-bold text-neon-cyan">75%</span>
+                    </div>
+                    <p class="text-xs text-slate-400 mb-3">Виконання профілактичних завдань знижує ризик втрати кісткової маси та дезадаптації.</p>
+                    
+                    <!-- Прогрес-бар -->
+                    <div class="w-full h-3 bg-space-900 rounded-full overflow-hidden border border-slate-800 mb-4">
+                        <div id="eva-progress-bar" class="h-full bg-gradient-to-r from-neon-blue to-neon-cyan transition-all duration-500" style="width: 75%;"></div>
+                    </div>
+
+                    <!-- Чек-лист щоденних місій -->
+                    <div class="space-y-2 text-xs">
+                        <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-space-900/90 border border-slate-800 hover:border-slate-700 cursor-pointer transition">
+                            <input type="checkbox" class="eva-task mt-0.5 rounded accent-cyan-400 w-4 h-4 cursor-pointer" checked onchange="recalculateHealth()">
+                            <div class="flex-1">
+                                <span class="text-slate-200 font-medium block">Силові вправи на тренажері ARED (60 хв)</span>
+                                <span class="text-[11px] text-slate-400">Захист кісток та м'язів від атрофії (+25% EVA)</span>
+                            </div>
+                        </label>
+
+                        <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-space-900/90 border border-slate-800 hover:border-slate-700 cursor-pointer transition">
+                            <input type="checkbox" class="eva-task mt-0.5 rounded accent-cyan-400 w-4 h-4 cursor-pointer" checked onchange="recalculateHealth()">
+                            <div class="flex-1">
+                                <span class="text-slate-200 font-medium block">Гідратація: 2.5 л регенерованої води</span>
+                                <span class="text-[11px] text-slate-400">Підтримка об'єму плазми крові (+25% EVA)</span>
+                            </div>
+                        </label>
+
+                        <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-space-900/90 border border-slate-800 hover:border-slate-700 cursor-pointer transition">
+                            <input type="checkbox" class="eva-task mt-0.5 rounded accent-cyan-400 w-4 h-4 cursor-pointer" checked onchange="recalculateHealth()">
+                            <div class="flex-1">
+                                <span class="text-slate-200 font-medium block">Світлотерапія (480 нм) для циркадних ритмів</span>
+                                <span class="text-[11px] text-slate-400">Компенсація 16 світанків на орбіті (+25% EVA)</span>
+                            </div>
+                        </label>
+
+                        <label class="flex items-start gap-2.5 p-2.5 rounded-xl bg-space-900/90 border border-slate-800 hover:border-slate-700 cursor-pointer transition">
+                            <input type="checkbox" id="task-dosimeter" class="eva-task mt-0.5 rounded accent-cyan-400 w-4 h-4 cursor-pointer" onchange="recalculateHealth()">
+                            <div class="flex-1">
+                                <span class="text-slate-200 font-medium block">Калібрування дозиметра та замір тиску</span>
+                                <span class="text-[11px] text-slate-400">Контроль радіаційного фону (+25% EVA)</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- КОЛОНКА 2 (4/12): ІНТЕРАКТИВНИЙ БІОМЕТРИЧНИЙ SVG-СИЛУЕТ -->
+        <section class="lg:col-span-4 bg-space-850/90 border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between relative overflow-hidden">
+            <div class="flex items-center justify-between z-10">
+                <div>
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-200">Біометричний двійник</h2>
+                    <p class="text-xs text-slate-400">Натисніть на зону тіла для діагностики</p>
+                </div>
+                <div id="overall-status-pill" class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/40">
+                    СТАН: НОРМА
+                </div>
+            </div>
+
+            <!-- Контейнер SVG-силуету -->
+            <div class="relative flex-1 flex items-center justify-center my-2 min-h-[380px]">
+                <svg id="astronaut-svg" viewBox="0 0 300 430" class="w-full max-w-[290px] h-auto drop-shadow-[0_0_20px_rgba(0,229,255,0.12)]">
+                    <defs>
+                        <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#1E293B" stop-opacity="0.9"/>
+                            <stop offset="100%" stop-color="#0F172A" stop-opacity="0.95"/>
+                        </linearGradient>
+                        <linearGradient id="scanGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#00E5FF" stop-opacity="0"/>
+                            <stop offset="50%" stop-color="#00E5FF" stop-opacity="0.6"/>
+                            <stop offset="100%" stop-color="#00E5FF" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+
+                    <!-- Фонова координатна сітка сканера -->
+                    <circle cx="150" cy="215" r="135" fill="none" stroke="#1E293B" stroke-width="1" stroke-dasharray="4 4"/>
+                    <circle cx="150" cy="215" r="95" fill="none" stroke="#1E293B" stroke-width="1"/>
+                    <line x1="150" y1="15" x2="150" y2="415" stroke="#1E293B" stroke-width="1" stroke-dasharray="3 3"/>
+                    <line x1="20" y1="215" x2="280" y2="215" stroke="#1E293B" stroke-width="1" stroke-dasharray="3 3"/>
+
+                    <!-- Базовий контур астронавта -->
+                    <g stroke="#38BDF8" stroke-width="1.5" stroke-opacity="0.45" fill="url(#bodyGrad)">
+                        <!-- Шия -->
+                        <path d="M137 78 L163 78 L167 96 L133 96 Z"/>
+                        <!-- Торс та плечі -->
+                        <path d="M102 102 C115 94, 185 94, 198 102 L212 122 L196 225 L104 225 L88 122 Z"/>
+                        <!-- Ліва рука -->
+                        <path d="M88 122 L64 195 L54 252 L69 256 L84 202 L98 145 Z"/>
+                        <!-- Права рука -->
+                        <path d="M212 122 L236 195 L246 252 L231 256 L216 202 L202 145 Z"/>
+                        <!-- Таз і ноги -->
+                        <path d="M104 225 L196 225 L192 315 L186 402 L162 402 L156 310 L150 265 L144 310 L138 402 L114 402 L108 315 Z"/>
+                    </g>
+
+                    <!-- ЗОНА 1: ГОЛОВА / ЦНС ТА ПСИХІКА -->
+                    <g id="zone-cns" onclick="selectSystem('cns')" class="cursor-pointer group">
+                        <ellipse id="shape-cns" cx="150" cy="48" rx="26" ry="32" fill="#10B981" fill-opacity="0.28" stroke="#10B981" stroke-width="2.5" class="transition-all duration-300"/>
+                        <!-- Внутрішній контур мозку -->
+                        <path d="M138 42 C138 30, 162 30, 162 42 C165 48, 160 56, 150 56 C140 56, 135 48, 138 42 Z" fill="none" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="1"/>
+                        <circle id="ring-cns" cx="150" cy="45" r="10" fill="none" stroke="#10B981" stroke-width="2" class="hotspot-ring"/>
+                        <circle id="dot-cns" cx="150" cy="45" r="5" fill="#10B981"/>
+                        <!-- Виноска -->
+                        <line x1="176" y1="45" x2="225" y2="32" stroke="#64748B" stroke-width="1"/>
+                        <text x="228" y="35" fill="#CBD5E1" font-size="10" font-family="JetBrains Mono">ЦНС / СОН</text>
+                    </g>
+
+                    <!-- ЗОНА 2: ГРУДНА КЛІТКА / СЕРЦЕВО-СУДИННА СИСТЕМА -->
+                    <g id="zone-cardio" onclick="selectSystem('cardio')" class="cursor-pointer group">
+                        <path id="shape-cardio" d="M114 112 L186 112 L180 165 L120 165 Z" rx="12" fill="#10B981" fill-opacity="0.28" stroke="#10B981" stroke-width="2.5" class="transition-all duration-300"/>
+                        <!-- Стилізоване серце -->
+                        <path d="M153 130 C150 125, 142 126, 142 133 C142 140, 153 147, 153 147 C153 147, 164 140, 164 133 C164 126, 156 125, 153 130 Z" fill="#FFFFFF" fill-opacity="0.45"/>
+                        <circle id="ring-cardio" cx="153" cy="136" r="11" fill="none" stroke="#10B981" stroke-width="2" class="hotspot-ring"/>
+                        <circle id="dot-cardio" cx="153" cy="136" r="5" fill="#10B981"/>
+                        <!-- Виноска -->
+                        <line x1="114" y1="136" x2="65" y2="115" stroke="#64748B" stroke-width="1"/>
+                        <text x="12" y="112" fill="#CBD5E1" font-size="10" font-family="JetBrains Mono">СЕРЦЕ</text>
+                    </g>
+
+                    <!-- ЗОНА 4: МЕТАБОЛІЗМ ТА ТЕРМОРЕГУЛЯЦІЯ (ЧЕВНА ПОРОЖНИНА) -->
+                    <g id="zone-metabolic" onclick="selectSystem('metabolic')" class="cursor-pointer group">
+                        <rect id="shape-metabolic" x="121" y="170" width="58" height="48" rx="10" fill="#10B981" fill-opacity="0.28" stroke="#10B981" stroke-width="2.5" class="transition-all duration-300"/>
+                        <circle id="ring-metabolic" cx="150" cy="194" r="10" fill="none" stroke="#10B981" stroke-width="2" class="hotspot-ring"/>
+                        <circle id="dot-metabolic" cx="150" cy="194" r="5" fill="#10B981"/>
+                        <!-- Виноска -->
+                        <line x1="179" y1="194" x2="225" y2="185" stroke="#64748B" stroke-width="1"/>
+                        <text x="228" y="188" fill="#CBD5E1" font-size="10" font-family="JetBrains Mono">МЕТАБОЛІЗМ</text>
+                    </g>
+
+                    <!-- ЗОНА 3: ОПОРНО-РУХОВИЙ АПАРАТ / КІСТКИ ТА М'ЯЗИ -->
+                    <g id="zone-musculo" onclick="selectSystem('musculo')" class="cursor-pointer group">
+                        <path id="shape-musculo" d="M116 235 L142 235 L136 385 L118 385 Z M158 235 L184 235 L182 385 L164 385 Z" fill="#10B981" fill-opacity="0.28" stroke="#10B981" stroke-width="2.5" class="transition-all duration-300"/>
+                        <circle id="ring-musculo" cx="128" cy="305" r="10" fill="none" stroke="#10B981" stroke-width="2" class="hotspot-ring"/>
+                        <circle id="dot-musculo" cx="128" cy="305" r="5" fill="#10B981"/>
+                        <!-- Виноска -->
+                        <line x1="118" y1="305" x2="65" y2="315" stroke="#64748B" stroke-width="1"/>
+                        <text x="10" y="318" fill="#CBD5E1" font-size="10" font-family="JetBrains Mono">КІСТКИ/М'ЯЗИ</text>
+                    </g>
+
+                    <!-- Скануючий промінь -->
+                    <rect x="40" y="0" width="220" height="6" fill="url(#scanGrad)" class="scanner-beam pointer-events-none"/>
+                </svg>
+            </div>
+
+            <!-- Швидкі кнопки вибору систем внизу силуету -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 z-10">
+                <button onclick="selectSystem('cns')" id="btn-sys-cns" class="sys-btn px-2 py-2 rounded-xl bg-space-900 border border-neon-cyan text-xs font-medium text-white transition flex flex-col items-center gap-1 cursor-pointer">
+                    <span id="badge-dot-cns" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span>ЦНС / Сон</span>
+                </button>
+                <button onclick="selectSystem('cardio')" id="btn-sys-cardio" class="sys-btn px-2 py-2 rounded-xl bg-space-900 border border-slate-800 text-xs font-medium text-slate-300 hover:border-slate-600 transition flex flex-col items-center gap-1 cursor-pointer">
+                    <span id="badge-dot-cardio" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span>Серце</span>
+                </button>
+                <button onclick="selectSystem('musculo')" id="btn-sys-musculo" class="sys-btn px-2 py-2 rounded-xl bg-space-900 border border-slate-800 text-xs font-medium text-slate-300 hover:border-slate-600 transition flex flex-col items-center gap-1 cursor-pointer">
+                    <span id="badge-dot-musculo" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span>Кістки</span>
+                </button>
+                <button onclick="selectSystem('metabolic')" id="btn-sys-metabolic" class="sys-btn px-2 py-2 rounded-xl bg-space-900 border border-slate-800 text-xs font-medium text-slate-300 hover:border-slate-600 transition flex flex-col items-center gap-1 cursor-pointer">
+                    <span id="badge-dot-metabolic" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span>Метаболізм</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- КОЛОНКА 3 (4/12): ДЕТАЛЬНА КАРТКА ДІАГНОСТИКИ + ДИНАМІЧНІ ГРАФІКИ -->
+        <section class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Картка діагностики обраної системи -->
+            <div id="diagnostic-card" class="bg-space-850/90 border border-slate-800 rounded-2xl p-4 shadow-lg transition-all duration-300">
+                <div class="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                        <span class="text-[11px] font-mono uppercase text-neon-cyan tracking-wider">Аналіз системи організму</span>
+                        <h3 id="diag-title" class="text-base sm:text-lg font-bold text-white mt-0.5">ЦНС, Когнітивний стан та Психіка</h3>
+                    </div>
+                    <span id="diag-status-badge" class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 whitespace-nowrap">
+                        🟢 НОРМА
+                    </span>
+                </div>
+
+                <!-- Поточні метрики системи -->
+                <div id="diag-metrics-box" class="bg-space-900 rounded-xl p-3 border border-slate-800 mb-3 font-mono text-xs text-slate-200">
+                    Сон: 7.5 год/добу • Психологічний індекс: 8/10
+                </div>
+
+                <!-- Вплив небезпеки космосу -->
+                <div class="mb-3">
+                    <div class="text-[11px] font-mono uppercase text-slate-400 mb-1">Чинник космічного середовища (NASA HRP):</div>
+                    <p id="diag-hazard" class="text-xs text-slate-200 bg-space-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                        Ізоляція та порушення циркадних ритмів через відсутність природного 24-годинного циклу день/ніч.
+                    </p>
+                </div>
+
+                <!-- Покроковий протокол дій -->
+                <div class="mb-3">
+                    <div class="text-[11px] font-mono uppercase text-neon-cyan mb-1">Що зробити астронавту зараз:</div>
+                    <ul id="diag-actions" class="text-xs text-slate-200 space-y-1.5 list-disc list-inside bg-space-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                        <li>Показники у межах норми. Продовжуйте графік сну та світлотерапії.</li>
+                    </ul>
+                </div>
+
+                <!-- Індикатор зв'язку із бортхірургом на Землі -->
+                <div id="flight-surgeon-alert" class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                    <span class="text-slate-400">Зв'язок із бортхірургом (Х'юстон):</span>
+                    <span id="surgeon-status" class="font-mono font-semibold text-emerald-400">Плановий звіт</span>
+                </div>
+            </div>
+
+            <!-- Графік 1: Серцево-судинна динаміка (7 днів) -->
+            <div class="bg-space-850/90 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Телеметрія ССС (Останні 7 солів)</h3>
+                    <span class="text-[11px] font-mono text-slate-400">Пульс / Тиск</span>
+                </div>
+                <div class="h-[145px] w-full">
+                    <canvas id="cardioChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Графік 2: Сон та психологічний індекс (7 днів) -->
+            <div class="bg-space-850/90 border border-slate-800 rounded-2xl p-4 shadow-lg">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Сон та когнітивний баланс (7 солів)</h3>
+                    <span class="text-[11px] font-mono text-slate-400">Год / Індекс</span>
+                </div>
+                <div class="h-[145px] w-full">
+                    <canvas id="neuroChart"></canvas>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- МОДАЛЬНЕ ВІКНО: БАЗА ЗНАНЬ NASA HRP (5 НЕБЕЗПЕК КОСМОСУ) -->
+    <div id="hrp-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-space-850 border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-space-900">
+                <div>
+                    <span class="text-[11px] font-mono text-neon-cyan uppercase">Довідник екіпажу • NASA Human Research Program</span>
+                    <h3 class="text-lg font-bold text-white">5 небезпек космічних польотів та інструкції вимірювання</h3>
+                </div>
+                <button onclick="toggleModal(false)" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            
+            <div class="p-4 overflow-y-auto space-y-3 text-xs sm:text-sm text-slate-300">
+                <div class="p-3.5 rounded-xl bg-space-900 border border-slate-800">
+                    <h4 class="font-bold text-neon-cyan mb-1">1. Космічне випромінювання (Space Radiation)</h4>
+                    <p class="text-slate-400 text-xs mb-1.5">За межами магнітосфери Землі екіпаж отримує вищі дози галактичних космічних променів. Це підвищує ризик пошкодження ДНК, катаракти та дегенерації ЦНС.</p>
+                    <p class="text-xs text-slate-200"><strong>Як контролювати:</strong> Щоденне зчитування персонального дозиметра та контроль температури/запальних маркерів.</p>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-space-900 border border-slate-800">
+                    <h4 class="font-bold text-neon-cyan mb-1">2. Ізоляція та обмеження (Isolation & Confinement)</h4>
+                    <p class="text-slate-400 text-xs mb-1.5">Тривале перебування в малому екіпажі без зміни оточення викликає порушення сну, зниження настрою, когнітивну втому та конфлікти.</p>
+                    <p class="text-xs text-slate-200"><strong>Як контролювати:</strong> Щоденний трекінг годин сну (норма 7–8.5 год) та оцінка психологічного індексу.</p>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-space-900 border border-slate-800">
+                    <h4 class="font-bold text-neon-cyan mb-1">3. Відстань від Землі (Distance from Earth)</h4>
+                    <p class="text-slate-400 text-xs mb-1.5">Під час місії на Марс затримка сигналу сягає 20 хвилин в один бік. Миттєва телемедицина з Х'юстоном неможлива — екіпаж має діяти автономно.</p>
+                    <p class="text-xs text-slate-200"><strong>Як контролювати:</strong> Використання автономних протоколів діагностики AstroPulse перед кожним виходом (EVA).</p>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-space-900 border border-slate-800">
+                    <h4 class="font-bold text-neon-cyan mb-1">4. Змінені гравітаційні поля (Gravity Fields)</h4>
+                    <p class="text-slate-400 text-xs mb-1.5">У невагомості рідина перерозподіляється до голови (підвищуючи внутрішньочерепний тиск), серце детренується, а кістки втрачають до 1–1.5% щільності щомісяця.</p>
+                    <p class="text-xs text-slate-200"><strong>Як контролювати:</strong> Регулярний замір АТ, пульсу у спокої та обов'язкові 60 хв силових тренувань на ARED.</p>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-space-900 border border-slate-800">
+                    <h4 class="font-bold text-neon-cyan mb-1">5. Агресивне замкнене середовище (Hostile/Closed Environments)</h4>
+                    <p class="text-slate-400 text-xs mb-1.5">Підвищений рівень CO₂, рециркульоване повітря та змінений мікробіом пригнічують імунітет і порушують обмін речовин.</p>
+                    <p class="text-xs text-slate-200"><strong>Як контролювати:</strong> Моніторинг температури тіла (виявлення прихованих інфекцій) та рівня глюкози в крові.</p>
+                </div>
+            </div>
+
+            <div class="p-3 border-t border-slate-800 bg-space-900 flex justify-end">
+                <button onclick="toggleModal(false)" class="px-4 py-2 rounded-xl bg-neon-cyan text-space-950 font-bold text-xs cursor-pointer">Зрозуміло, повернутися до термінала</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- КОНФІГУРАЦІЯ СЕРЕДОВИЩ МІСІЇ ---
+        const environments = {
+            iss: {
+                gravity: '0 g (Мікрогравітація)',
+                latency: '~1.5 сек (Реалтайм)',
+                hazards: ['Невагомість (втрата кісток)', 'Циркадний зсув (16 світанків)', 'Замкнене середовище'],
+                radBonus: 0
+            },
+            moon: {
+                gravity: '0.16 g (1/6 Земної)',
+                latency: '~2.6 сек (Місячна орбіта)',
+                hazards: ['Місячний пил (реголіт)', 'Підвищена радіація', 'Часткова гравітація'],
+                radBonus: 1
+            },
+            mars_transit: {
+                gravity: '0 g (Глибокий космос)',
+                latency: '14 хв 20 сек (Автономний режим)',
+                hazards: ['Галактична радіація (GCR)', 'Критична відстань від Землі', 'Тривала ізоляція'],
+                radBonus: 2
+            },
+            rover: {
+                gravity: '0.38 g (Марсіанська)',
+                latency: '18 хв 45 сек (Тільки автономно)',
+                hazards: ['Високе навантаження EVA', 'Ризик гіпоглікемії / зневоднення', 'Ізоляція екіпажу ровера'],
+                radBonus: 1
+            }
+        };
+
+        // Поточна обрана система на силуеті
+        let currentSelectedSystem = 'cns';
+        // Стан усіх 4 систем
+        let systemDiagnostics = {};
+
+        // Історичні дані для графіків (6 попередніх днів + 7-й "Сьогодні")
+        const labels7Days = ['Сол 136', 'Сол 137', 'Сол 138', 'Сол 139', 'Сол 140', 'Сол 141', 'Сьогодні'];
+        let hrHistory = [68, 70, 71, 69, 74, 71, 72];
+        let sysHistory = [116, 118, 120, 117, 122, 119, 118];
+        let sleepHistory = [7.5, 7.0, 8.0, 7.5, 6.5, 7.5, 7.5];
+        let moodHistory = [8, 8, 9, 8, 7, 8, 8];
+
+        let cardioChartInstance = null;
+        let neuroChartInstance = null;
+
+        // --- ІНІЦІАЛІЗАЦІЯ ГРАФІКІВ CHART.JS ---
+        function initCharts() {
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#94A3B8', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10 }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748B', font: { family: 'JetBrains Mono', size: 9 } },
+                        grid: { color: 'rgba(30, 41, 59, 0.4)' }
+                    },
+                    y: {
+                        ticks: { color: '#64748B', font: { family: 'JetBrains Mono', size: 9 } },
+                        grid: { color: 'rgba(30, 41, 59, 0.4)' }
+                    }
+                }
+            };
+
+            const ctxCardio = document.getElementById('cardioChart').getContext('2d');
+            cardioChartInstance = new Chart(ctxCardio, {
+                type: 'line',
+                data: {
+                    labels: labels7Days,
+                    datasets: [
+                        {
+                            label: 'Пульс (уд/хв)',
+                            data: hrHistory,
+                            borderColor: '#00E5FF',
+                            backgroundColor: 'rgba(0, 229, 255, 0.12)',
+                            borderWidth: 2,
+                            tension: 0.35,
+                            fill: true,
+                            pointRadius: 3
+                        },
+                        {
+                            label: 'Сист. тиск',
+                            data: sysHistory,
+                            borderColor: '#F59E0B',
+                            borderWidth: 2,
+                            borderDash: [4, 4],
+                            tension: 0.35,
+                            pointRadius: 3
+                        }
+                    ]
+                },
+                options: commonOptions
+            });
+
+            const ctxNeuro = document.getElementById('neuroChart').getContext('2d');
+            neuroChartInstance = new Chart(ctxNeuro, {
+                type: 'bar',
+                data: {
+                    labels: labels7Days,
+                    datasets: [
+                        {
+                            label: 'Сон (год)',
+                            data: sleepHistory,
+                            backgroundColor: 'rgba(56, 189, 248, 0.55)',
+                            borderColor: '#38BDF8',
+                            borderWidth: 1,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Настрій (1-10)',
+                            data: moodHistory,
+                            type: 'line',
+                            borderColor: '#10B981',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 3
+                        }
+                    ]
+                },
+                options: commonOptions
+            });
+        }
+
+        // --- ЗМІНА КОСМІЧНОГО СЕРЕДОВИЩА ---
+        function changeEnvironment() {
+            const envKey = document.getElementById('env-select').value;
+            const env = environments[envKey];
+
+            document.getElementById('env-gravity').textContent = env.gravity;
+            document.getElementById('env-latency').textContent = env.latency;
+
+            const badgesContainer = document.getElementById('env-hazards-badges');
+            badgesContainer.innerHTML = env.hazards.map(h => 
+                `<span class="px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[11px]">⚠️ ${h}</span>`
+            ).join('');
+
+            recalculateHealth();
+        }
+
+        // --- ШВИДКІ ПРЕСЕТИ ДЛЯ ДЕМОНСТРАЦІЇ ---
+        function applyPreset(type) {
+            if (type === 'normal') {
+                document.getElementById('inp-sys').value = 118;
+                document.getElementById('inp-dia').value = 78;
+                document.getElementById('inp-hr').value = 72;
+                document.getElementById('inp-glucose').value = 94;
+                document.getElementById('inp-temp').value = 36.6;
+                document.getElementById('inp-sleep').value = 7.5;
+                document.getElementById('inp-mood').value = 8;
+            } else if (type === 'warning') {
+                document.getElementById('inp-sys').value = 142;
+                document.getElementById('inp-dia').value = 92;
+                document.getElementById('inp-hr').value = 108;
+                document.getElementById('inp-glucose').value = 135;
+                document.getElementById('inp-temp').value = 37.3;
+                document.getElementById('inp-sleep').value = 5.0;
+                document.getElementById('inp-mood').value = 4;
+            } else if (type === 'critical') {
+                document.getElementById('inp-sys').value = 85;
+                document.getElementById('inp-dia').value = 55;
+                document.getElementById('inp-hr').value = 138;
+                document.getElementById('inp-glucose').value = 52;
+                document.getElementById('inp-temp').value = 38.4;
+                document.getElementById('inp-sleep').value = 3.5;
+                document.getElementById('inp-mood').value = 2;
+            }
+            recalculateHealth();
+        }
+
+        // --- ГОЛОВНИЙ АЛГОРИТМ ОЦІНКИ СТАНУ ЗДОРОВ'Я ---
+        function recalculateHealth() {
+            const sys = parseFloat(document.getElementById('inp-sys').value) || 120;
+            const dia = parseFloat(document.getElementById('inp-dia').value) || 80;
+            const hr = parseFloat(document.getElementById('inp-hr').value) || 70;
+            const glucose = parseFloat(document.getElementById('inp-glucose').value) || 95;
+            const temp = parseFloat(document.getElementById('inp-temp').value) || 36.6;
+            const sleep = parseFloat(document.getElementById('inp-sleep').value) || 7.5;
+            const mood = parseInt(document.getElementById('inp-mood').value) || 8;
+            const envKey = document.getElementById('env-select').value;
+
+            document.getElementById('mood-val-label').textContent = `${mood} / 10`;
+
+            // Підрахунок EVA Readiness (гейміфікація)
+            const tasks = document.querySelectorAll('.eva-task');
+            let completedTasks = 0;
+            tasks.forEach(t => { if (t.checked) completedTasks++; });
+            const evaPercent = Math.round((completedTasks / tasks.length) * 100);
+            document.getElementById('eva-score-badge').textContent = `${evaPercent}%`;
+            document.getElementById('eva-progress-bar').style.width = `${evaPercent}%`;
+
+            // 1. ОЦІНКА ЦНС / СНУ / ПСИХІКИ
+            let cnsStatus = 'green';
+            let cnsActions = ['Показники у межах норми. Продовжуйте режим світлотерапії та гігієни сну.'];
+            if (sleep < 4.5 || mood <= 2) {
+                cnsStatus = 'red';
+                cnsActions = [
+                    'Критичне когнітивне виснаження! Тимчасово заборонити керування маніпулятором та вихід у відкритий космос (EVA).',
+                    'Забезпечити 8-годинний відпочинок у звукоізольованій каюті.',
+                    'Провести психологічну телеконсультацію з групою підтримки.'
+                ];
+            } else if (sleep < 6.5 || mood <= 5 || envKey === 'mars_transit') {
+                cnsStatus = 'yellow';
+                cnsActions = [
+                    'Виявлено помірний дефіцит сну або стрес ізоляції.',
+                    'Застосувати 30 хв синього спектру світла вранці та обмежити кофеїн за 6 год до сну.',
+                    'Виконати 10-хвилинну дихальну практику для зниження кортизолу.'
+                ];
+            }
+
+            // 2. ОЦІНКА СЕРЦЕВО-СУДИННОЇ СИСТЕМИ
+            let cardioStatus = 'green';
+            let cardioActions = ['Гемодинаміка стабільна. Адаптація серцево-судинної системи проходить успішно.'];
+            if (hr > 125 || hr < 45 || sys > 160 || sys < 90) {
+                cardioStatus = 'red';
+                cardioActions = [
+                    'УВАГА: Критичне відхилення гемодинаміки (тахікардія або гіпотензія)!',
+                    'Припинити фізичне навантаження, прийняти горизонтальне положення.',
+                    'Невідкладно зняти 12-канальну ЕКГ та передати телеметрію бортхірургу.'
+                ];
+            } else if (hr > 95 || sys > 135 || dia > 88) {
+                cardioStatus = 'yellow';
+                cardioActions = [
+                    'Підвищений пульс або тиск (можливий вплив перерозподілу рідини у невагомості).',
+                    'Випити 500 мл ізотонічного розчину для стабілізації об\'єму плазми.',
+                    'Повторити замір через 15 хвилин у стані повного спокою.'
+                ];
+            }
+
+            // 3. ОЦІНКА ОПОРНО-РУХОВОГО АПАРАТУ (залежить від середовища та тренувань ARED)
+            let musculoStatus = 'green';
+            let musculoActions = ['Силовий протокол ARED виконано. Ризик резорбції кісткової тканини контрольований.'];
+            const aredDone = tasks[0].checked;
+            if (!aredDone && (envKey === 'iss' || envKey === 'mars_transit')) {
+                musculoStatus = 'yellow';
+                musculoActions = [
+                    'Пропущено щоденне силове тренування на тренажері ARED в умовах 0g!',
+                    'У невагомості кістки втрачають до 1.5% кальцію на місяць — виконайте 45 хв присідань та станової тяги.',
+                    'Прийняти профілактичну дозу вітаміну D3 (2000 МО).'
+                ];
+            } else if (evaPercent < 50) {
+                musculoStatus = 'yellow';
+                musculoActions = [
+                    'Низький рівень виконання протоколів підготовки (EVA Readiness < 50%).',
+                    'Виконайте комплекс вправ на велоергометрі CEVIS для підтримки м\'язового тонусу.'
+                ];
+            }
+
+            // 4. ОЦІНКА МЕТАБОЛІЗМУ ТА ТЕРМОРЕГУЛЯЦІЇ
+            let metaStatus = 'green';
+            let metaActions = ['Рівень глюкози та терморегуляція у межах фізіологічної норми.'];
+            if (glucose < 60 || glucose > 200 || temp >= 38.0 || temp < 35.2) {
+                metaStatus = 'red';
+                metaActions = [
+                    glucose < 60 
+                        ? 'КРИТИЧНА ГІПОГЛІКЕМІЯ! Негайно прийняти 15–20 г швидких вуглеводів (глюкозний гель з аптечки).' 
+                        : 'Критичне порушення терморегуляції / гіперглікемія!',
+                    'Перевірити герметичність системи охолодження скафандра / модуля та рівень CO₂.',
+                    'Ініціювати терміновий протокол зв\'язку з медичним центром.'
+                ];
+            } else if (glucose < 72 || glucose > 130 || temp > 37.1) {
+                metaStatus = 'yellow';
+                metaActions = [
+                    'Помірне відхилення рівня глюкози або субфебрильна температура (ознака імунного навантаження в замкненому середовищі).',
+                    'Збалансувати раціон, збільшити споживання води та повторити аналіз через 1 годину.'
+                ];
+            }
+
+            // Зберігаємо результати діагностики
+            systemDiagnostics = {
+                cns: {
+                    title: 'ЦНС, Когнітивний стан та Психіка',
+                    status: cnsStatus,
+                    metrics: `Сон: ${sleep} год/добу • Психологічний індекс: ${mood}/10`,
+                    hazard: 'Ізоляція, космічна радіація та зміна циклу день/ніч впливають на нейронні зв\'язки та якість сну.',
+                    actions: cnsActions
+                },
+                cardio: {
+                    title: 'Серцево-судинна система (ССС)',
+                    status: cardioStatus,
+                    metrics: `АТ: ${sys}/${dia} мм рт.ст. • Пульс: ${hr} уд/хв`,
+                    hazard: 'У мікрогравітації рідина зміщується до верхньої частини тіла, що змінює навантаження на міокард та барорецептори.',
+                    actions: cardioActions
+                },
+                musculo: {
+                    title: 'Опорно-руховий апарат (Кістки та М\'язи)',
+                    status: musculoStatus,
+                    metrics: `Готовність EVA: ${evaPercent}% • Силовий протокол ARED: ${aredDone ? 'Виконано' : 'Не виконано'}`,
+                    hazard: 'Відсутність осьового навантаження у 0g/0.16g призводить до вимивання кальцію та атрофії м\'язів спини й ніг.',
+                    actions: musculoActions
+                },
+                metabolic: {
+                    title: 'Метаболізм, Імунітет та Терморегуляція',
+                    status: metaStatus,
+                    metrics: `Глюкоза: ${glucose} мг/дл • Температура тіла: ${temp.toFixed(1)} °C`,
+                    hazard: 'Замкнене середовище з підвищеним CO₂ та стрес змінюють чутливість до інсуліну та реактивність імунної системи.',
+                    actions: metaActions
+                }
+            };
+
+            // Оновлення кольорів SVG-зон та індикаторів
+            updateBodyVisuals();
+            // Оновлення правої картки діагностики
+            renderDiagnosticPanel();
+            // Оновлення останніх точок на графіках
+            updateCharts(hr, sys, sleep, mood);
+        }
+
+        // --- ОНОВЛЕННЯ КОЛЬОРІВ СВІТЛОФОРА НА СИЛУЕТІ ---
+        function updateBodyVisuals() {
+            const colorMap = {
+                green:  { hex: '#10B981', badgeBg: 'bg-emerald-500' },
+                yellow: { hex: '#F59E0B', badgeBg: 'bg-amber-500' },
+                red:    { hex: '#EF4444', badgeBg: 'bg-red-500' }
+            };
+
+            let worstStatus = 'green';
+
+            ['cns', 'cardio', 'musculo', 'metabolic'].forEach(sysKey => {
+                const st = systemDiagnostics[sysKey].status;
+                if (st === 'red') worstStatus = 'red';
+                else if (st === 'yellow' && worstStatus !== 'red') worstStatus = 'yellow';
+
+                const c = colorMap[st];
+                const shape = document.getElementById(`shape-${sysKey}`);
+                const ring = document.getElementById(`ring-${sysKey}`);
+                const dot = document.getElementById(`dot-${sysKey}`);
+                const btnDot = document.getElementById(`badge-dot-${sysKey}`);
+
+                if (shape) {
+                    shape.setAttribute('fill', c.hex);
+                    shape.setAttribute('stroke', c.hex);
+                }
+                if (ring) ring.setAttribute('stroke', c.hex);
+                if (dot) dot.setAttribute('fill', c.hex);
+                if (btnDot) {
+                    btnDot.className = `w-2.5 h-2.5 rounded-full ${c.badgeBg}`;
+                }
+            });
+
+            // Загальний індикатор стану екіпажу над силуетом
+            const pill = document.getElementById('overall-status-pill');
+            if (worstStatus === 'green') {
+                pill.className = 'px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/40';
+                pill.textContent = 'СТАН: НОРМА';
+            } else if (worstStatus === 'yellow') {
+                pill.className = 'px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/40';
+                pill.textContent = 'СТАН: ПОТРІБНА УВАГА';
+            } else {
+                pill.className = 'px-3 py-1 rounded-full text-xs font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse';
+                pill.textContent = 'СТАН: КРИТИЧНИЙ РИЗИК';
+            }
+        }
+
+        // --- ВИБІР СИСТЕМИ НА СИЛУЕТІ ---
+        function selectSystem(sysKey) {
+            currentSelectedSystem = sysKey;
+
+            // Підсвітка активної кнопки внизу силуету
+            document.querySelectorAll('.sys-btn').forEach(btn => {
+                btn.classList.remove('border-neon-cyan', 'text-white');
+                btn.classList.add('border-slate-800', 'text-slate-300');
+            });
+            const activeBtn = document.getElementById(`btn-sys-${sysKey}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('border-slate-800', 'text-slate-300');
+                activeBtn.classList.add('border-neon-cyan', 'text-white');
+            }
+
+            renderDiagnosticPanel();
+        }
+
+        // --- РЕНДЕР ПРАВОЇ КАРТКИ ДІАГНОСТИКИ ---
+        function renderDiagnosticPanel() {
+            const data = systemDiagnostics[currentSelectedSystem];
+            if (!data) return;
+
+            document.getElementById('diag-title').textContent = data.title;
+            document.getElementById('diag-metrics-box').textContent = data.metrics;
+            document.getElementById('diag-hazard').textContent = data.hazard;
+
+            const actionsList = document.getElementById('diag-actions');
+            actionsList.innerHTML = data.actions.map(act => `<li>${act}</li>`).join('');
+
+            const badge = document.getElementById('diag-status-badge');
+            const surgeonStatus = document.getElementById('surgeon-status');
+            const card = document.getElementById('diagnostic-card');
+
+            if (data.status === 'green') {
+                badge.className = 'px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 whitespace-nowrap';
+                badge.textContent = '🟢 НОРМА';
+                surgeonStatus.className = 'font-mono font-semibold text-emerald-400';
+                surgeonStatus.textContent = 'Плановий звіт (Не потрібно)';
+                card.style.borderColor = '#1E293B';
+            } else if (data.status === 'yellow') {
+                badge.className = 'px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/40 whitespace-nowrap';
+                badge.textContent = '🟡 УВАГА / РИЗИК';
+                surgeonStatus.className = 'font-mono font-semibold text-amber-400';
+                surgeonStatus.textContent = 'Надіслати телеметрію при сеансі';
+                card.style.borderColor = 'rgba(245, 158, 11, 0.45)';
+            } else {
+                badge.className = 'px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/50 whitespace-nowrap animate-pulse';
+                badge.textContent = '🔴 КРИТИЧНО';
+                surgeonStatus.className = 'font-mono font-bold text-red-400';
+                surgeonStatus.textContent = 'ТЕРМІНОВИЙ ВИКЛИК БОРТХІРУРГА!';
+                card.style.borderColor = 'rgba(239, 68, 68, 0.65)';
+            }
+        }
+
+        // --- ДИНАМІЧНЕ ОНОВЛЕННЯ ГРАФІКІВ ---
+        function updateCharts(hr, sys, sleep, mood) {
+            if (!cardioChartInstance || !neuroChartInstance) return;
+
+            cardioChartInstance.data.datasets[0].data[6] = hr;
+            cardioChartInstance.data.datasets[1].data[6] = sys;
+            cardioChartInstance.update('none');
+
+            neuroChartInstance.data.datasets[0].data[6] = sleep;
+            neuroChartInstance.data.datasets[1].data[6] = mood;
+            neuroChartInstance.update('none');
+        }
+
+        // --- МОДАЛЬНЕ ВІКНО БАЗИ ЗНАНЬ ---
+        function toggleModal(show) {
+            const modal = document.getElementById('hrp-modal');
+            if (show) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
+        }
+
+        // Запуск при завантаженні сторінки
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            changeEnvironment();
+            selectSystem('cns');
+        });
+    </script>
+</body>
+</html>
